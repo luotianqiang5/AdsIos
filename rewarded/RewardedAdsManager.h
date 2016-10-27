@@ -15,7 +15,7 @@
 @property (nonatomic, assign) BOOL  isShowing;
 @property (nonatomic, assign) id<RewardedAdsManagerDelegate> delegate;
 @property (nonatomic, strong) NSString* zoneID;
-
+@property(nonatomic,assign)BOOL isSkip;
 @property(nonatomic,assign)BOOL isDebugModel;
 + (instancetype)getInstance;
 - (void)preload;

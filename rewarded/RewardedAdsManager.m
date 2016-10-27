@@ -13,11 +13,12 @@
 #import "CrosspromoAdsManager.h"
 #import "AdIdHelper.h"
 #import "AdDef.h"
-#import <AdColony/AdColony.h>
+#import <GoogleMobileAds/GoogleMobileAds.h>
+//#import <AdColony/AdColony.h>
 
 #define AD_TYPE @"rewarded"
 
-@interface RewardedAdsManager()<FullscreenAdDelegate,AdColonyDelegate,AdColonyAdDelegate>
+@interface RewardedAdsManager()<FullscreenAdDelegate,GADRewardBasedVideoAdDelegate>
 @property (nonatomic, assign) BOOL  isPreloading;
 @end
 
@@ -40,29 +41,11 @@
     {
         _isDebugModel = NO;
         
-
-//        
-//#if RewardedType == AdsTypeMopub
-//        self.fullscreenAd=[[FullscreenAdMopubRewarded new] autorelease];
-//#elif RewardedType == AdsTypeFyber || RewardedType == AdsTypeFyberNew
-//        self.fullscreenAd=[[FullScreenAdFyberRewarded new] autorelease];
-//#elif RewardedType == AdsTypeAdColony
-//        self.fullscreenAd = [[FullscreenAdAdColonyRewarded new] autorelease];
-//#else
-//        self.fullscreenAd=nil;
-//        return nil;
-//#endif
-        
-//        self.fullscreenAd.delegate = self;
-//        self.fullscreenAd.adId = adId;
-//        self.fullscreenAd.isRewarded = YES;
-//        self.fullscreenAd.isDebugModel = NO;
-        
         self.isPreloading = NO;
         self.isPreloaded = NO;
         self.autoShow = NO;
-        
-        //[self configure];
+        self.isSkip = YES;
+        [GADRewardBasedVideoAd sharedInstance].delegate = self;
     }
     
     return self;
@@ -89,9 +72,7 @@
     
     NSArray *adIdArr = [adId componentsSeparatedByString:@","];
     if(adIdArr.count == 2){
-        //static dispatch_once_t onceToken;
-        //dispatch_once(&onceToken, ^{
-        //if(NO == self.isPreloading)
+       
         
         if([self isPreloaded])
         {
@@ -102,10 +83,8 @@
         else
         {
             self.isPreloading = YES;
-            [AdColony configureWithAppID:[adIdArr[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] zoneIDs:@[[adIdArr[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]] delegate:self logging:YES];
             self.zoneID = [adIdArr[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
         }
-        //});
         
         return YES;
     }
@@ -118,6 +97,9 @@
     if(NO == [self configure])
     {
         [self onFailed: nil];
+    }else {
+        [[GADRewardBasedVideoAd sharedInstance] loadRequest:[GADRequest request]
+                                               withAdUnitID:self.zoneID];
     }
 }
 
@@ -135,17 +117,20 @@
         return NO;
     }
     
-//    if(NO == [AdColony isVirtualCurrencyRewardAvailableForZone:self.zoneID])
-//    {
-//        return NO;
-//    }
+    if(NO == [[GADRewardBasedVideoAd sharedInstance] isReady])
+    {
+        return NO;
+    }
     
     UIViewController *vc = [UIApplication sharedApplication].keyWindow.rootViewController;
     if(vc.presentingViewController || vc.presentedViewController){
         return NO;
     }
-    
-    [AdColony playVideoAdForZone:self.zoneID withDelegate:self withV4VCPrePopup:NO andV4VCPostPopup:NO];
+    if ([[GADRewardBasedVideoAd sharedInstance] isReady]) {
+        self.isSkip = YES;
+        [[GADRewardBasedVideoAd sharedInstance] presentFromRootViewController:vc];
+    }
+   
     
     return YES;
 }
@@ -157,7 +142,8 @@
 
 - (BOOL)isPreloaded
 {
-    return [AdColony zoneStatusForZone:self.zoneID] == ADCOLONY_ZONE_STATUS_ACTIVE;
+    return [[GADRewardBasedVideoAd sharedInstance] isReady];
+   
 }
 
 - (BOOL)isShowing
@@ -167,64 +153,46 @@
 
 #pragma mark - AdColonyDelegate
 
-- (void)onAdColonyAdAvailabilityChange:(BOOL)available inZone:(NSString*) zoneID
-{
+- (void)rewardBasedVideoAd:(GADRewardBasedVideoAd *)rewardBasedVideoAd
+   didRewardUserWithReward:(GADAdReward *)reward {
+   // self.isPreloading = NO;
+    self.isSkip = NO;
+   
+}
+
+- (void)rewardBasedVideoAdDidReceiveAd:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
     self.isPreloading = NO;
-    
-    if(![zoneID isEqualToString:self.zoneID]){
-        return;
-    }
-    
-    if(available)
-    {
-        [self onLoaded];
-        
-        if(_autoShow)
-            [self show];
-    }
-    else
-    {
-        //[self onFailed:nil];
-    }
+    [self onLoaded];
+    if(_autoShow)
+        [self show];
 }
 
-- (void)onAdColonyV4VCReward:(BOOL)success currencyName:(NSString *)currencyName currencyAmount:(int)amount inZone:(NSString *)zoneID;
-{
+- (void)rewardBasedVideoAdDidOpen:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
+     [self onExpanded];
+    NSLog(@"Opened reward based video ad.");
+}
+
+- (void)rewardBasedVideoAdDidStartPlaying:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
+   NSLog(@"Reward based video ad started playing.");
+}
+
+- (void)rewardBasedVideoAdDidClose:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
+       self.isPreloading = NO;
+     [self onRewarded:@"Reward" rewardedNum:0 isSkipped:self.isSkip];
+     [self onCollapsed];
+    [self preload];
+}
+
+- (void)rewardBasedVideoAdWillLeaveApplication:(GADRewardBasedVideoAd *)rewardBasedVideoAd {
+    NSLog(@"Reward based video ad will leave application.");
+}
+
+- (void)rewardBasedVideoAd:(GADRewardBasedVideoAd *)rewardBasedVideoAd
+    didFailToLoadWithError:(NSError *)error {
     self.isPreloading = NO;
-    
-    if(![zoneID isEqualToString:self.zoneID]){
-        return;
-    }
-    
-    [self onRewarded:currencyName rewardedNum:amount isSkipped:!success];
+    [self onFailed:error];
 }
 
-#pragma mark - AdColonyAdDelegate
-
-- (void)onAdColonyAdStartedInZone:(NSString *)zoneID
-{
-    if([zoneID isEqualToString:self.zoneID]){
-        [self onExpanded];
-    }
-}
-
-- (void)onAdColonyAdAttemptFinished:(BOOL)shown inZone:(NSString *)zoneID
-{
-    self.isPreloading = NO;
-    
-    if(shown && [zoneID isEqualToString:self.zoneID]){
-        [self onCollapsed];
-    }
-}
-
-//- (void)onAdColonyAdFinishedWithInfo:(AdColonyAdInfo *)info
-//{
-//    NSLog(@"onAdColonyAdFinishedWithInfo");
-//    
-//    if([info.zoneID isEqualToString:self.zoneID]){
-//        [self onCollapsed];
-//    }
-//}
 
 #pragma mark - 全屏回调
 
