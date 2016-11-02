@@ -19,6 +19,7 @@
 
 @interface RewardedAdsManager()<FullscreenAdDelegate,AdColonyDelegate,AdColonyAdDelegate>
 @property (nonatomic, assign) BOOL  isPreloading;
+@property (nonatomic, assign) BOOL  isConfig;
 @end
 
 @implementation RewardedAdsManager
@@ -61,7 +62,7 @@
         self.isPreloading = NO;
         self.isPreloaded = NO;
         self.autoShow = NO;
-        
+        self.isConfig = NO;
         //[self configure];
     }
     
@@ -102,8 +103,11 @@
         else
         {
             self.isPreloading = YES;
+            if(_isConfig == NO){
+                _isConfig = YES;
             [AdColony configureWithAppID:[adIdArr[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] zoneIDs:@[[adIdArr[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]]] delegate:self logging:YES];
             self.zoneID = [adIdArr[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+            }
         }
         //});
         
@@ -134,7 +138,8 @@
     if([CrosspromoAdsManager getInstance].isShowing){
         return NO;
     }
-    
+    if(NO == _isPreloaded)
+        return  NO;
 //    if(NO == [AdColony isVirtualCurrencyRewardAvailableForZone:self.zoneID])
 //    {
 //        return NO;
@@ -155,10 +160,10 @@
     _autoShow = autoShow;
 }
 
-- (BOOL)isPreloaded
-{
-    return [AdColony zoneStatusForZone:self.zoneID] == ADCOLONY_ZONE_STATUS_ACTIVE;
-}
+//- (BOOL)isPreloaded
+//{
+//    return [AdColony zoneStatusForZone:self.zoneID] == ADCOLONY_ZONE_STATUS_ACTIVE;
+//}
 
 - (BOOL)isShowing
 {
@@ -170,7 +175,7 @@
 - (void)onAdColonyAdAvailabilityChange:(BOOL)available inZone:(NSString*) zoneID
 {
     self.isPreloading = NO;
-    
+    _isPreloaded = available;
     if(![zoneID isEqualToString:self.zoneID]){
         return;
     }
